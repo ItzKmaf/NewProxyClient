@@ -20,10 +20,13 @@ public class EncryptionHandler {
 	private final ServerConnection connection;
 	private DataOutputStream outputStream;
 	private DataInputStream inputStream;
+	
 	private PublicKey publicKey;
 	private SecretKey secretKey;
+	
 	private byte[] sharedSecret;
 	private byte[] verifyToken;
+	
 	private String serverID;
 	private byte[] publicKeyByte;
 	private byte[] verifyTokenByte;
@@ -41,18 +44,45 @@ public class EncryptionHandler {
 	}
 	
 	public void handleEncryptionRequest(GenericPacket packet) throws IOException {
+		System.out.println("[Encryption]: Received Encryption request");
 		manager.pauseReading();
 		L_EncryptionRequest_0x01_PB encryptionRequest = new L_EncryptionRequest_0x01_PB(manager, this);
 		encryptionRequest.readPacket(packet);
+		
 		serverID = encryptionRequest.getServerID().trim();
 		publicKeyByte = encryptionRequest.getPublicKeyByte();
 		verifyTokenByte = encryptionRequest.getVerifyTokenByte();
+		
+		System.out.println("[Encryption]: Generating Keys...");
+		generateKeypair();
+		System.out.println("[Encryption]: Generated Keys");
+		generateSharedSecret();
+		loginMojang();
+		
+		System.out.println("[Encryption]: Sending Encryption response...");
+		L_EncryptionResponse_0x01_SB encryptionResponse = new L_EncryptionResponse_0x01_SB(sharedSecret, verifyToken);
+		manager.addOutgoingPacket(encryptionResponse.generateOutgoingPacket());
+	}
+	
+	public void generateKeypair() {
+		secretKey = EncryptionUtils.generateSecretKey();
 		try {
 			publicKey = EncryptionUtils.generatePublicKey(publicKeyByte);
 		} catch (GeneralSecurityException exception) {
 			throw new Error("Unable to generate public key", exception);
 		}
-		secretKey = EncryptionUtils.generateSecretKey();
+	}
+	
+	private void generateSharedSecret() {
+		try {
+			this.sharedSecret = EncryptionUtils.cipher(1, publicKey, secretKey.getEncoded());
+			this.verifyToken = EncryptionUtils.cipher(1, publicKey, verifyTokenByte);
+		} catch (GeneralSecurityException exception) {
+			throw new Error("Unable to cipher", exception);
+		}
+	}
+	
+	public void loginMojang() throws IOException{
 		if (!serverID.equals("-")) {
 			try {
 				String hash = new BigInteger(EncryptionUtils.encrypt(serverID, publicKey, secretKey)).toString(16);
@@ -61,17 +91,10 @@ public class EncryptionHandler {
 				e.printStackTrace();
 			}
 		}
-		try {
-			this.sharedSecret = EncryptionUtils.cipher(1, publicKey, secretKey.getEncoded());
-			this.verifyToken = EncryptionUtils.cipher(1, publicKey, verifyTokenByte);
-		} catch (GeneralSecurityException exception) {
-			throw new Error("Unable to cipher", exception);
-		}
-		L_EncryptionResponse_0x01_SB encryptionResponse = new L_EncryptionResponse_0x01_SB(sharedSecret, verifyToken);
-		manager.addOutgoingPacket(encryptionResponse.generateOutgoingPacket());
 	}
 	
-	public void completeEncryption() throws IOException {
+	public void completeEncryption() {
+		System.out.println("[Encryption]: Sent Encryption Response");
 		if (secretKey != null) {
 			System.out.println("Failed to Authenticate");
 		}
@@ -93,7 +116,7 @@ public class EncryptionHandler {
 		}
 	}
 	
-	public void setEncrypting(boolean encrypting) throws IOException {
+	public void setEncrypting(boolean encrypting) {
 		if (encrypting) {
 			if (this.encrypting) {
 				throw new IllegalStateException("Already Encrypting");
@@ -109,7 +132,7 @@ public class EncryptionHandler {
 		this.encrypting = true;
 	}
 	
-	public void setDecrypting(boolean decrypting) throws IOException {
+	public void setDecrypting(boolean decrypting) {
 		if (decrypting) {
 			if (this.decrypting)
 				throw new IllegalStateException("Already decrypting");
