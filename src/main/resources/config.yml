@@ -1,0 +1,4 @@
+email: "YourEmailHere"
+password: "YourPasswordHere"
+serverDomain: "ServerDomainHere"
+serverPort: 25565
