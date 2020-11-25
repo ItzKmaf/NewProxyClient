@@ -20,6 +20,7 @@ public class EncryptionHandler {
 	private final ServerConnection connection;
 	private DataOutputStream outputStream;
 	private DataInputStream inputStream;
+	private DataInputStream originalInputStream;
 	
 	private PublicKey publicKey;
 	private SecretKey secretKey;
@@ -41,11 +42,11 @@ public class EncryptionHandler {
 	public void setStreams() throws IOException {
 		this.outputStream = new DataOutputStream(connection.getOutputStream());
 		this.inputStream = new DataInputStream(connection.getInputStream());
+		this.originalInputStream = inputStream;
 	}
 	
 	public void handleEncryptionRequest(GenericPacket packet) throws IOException {
 		System.out.println("[Encryption]: Received Encryption request");
-		manager.pauseReading();
 		L_EncryptionRequest_0x01_PB encryptionRequest = new L_EncryptionRequest_0x01_PB(manager, this);
 		encryptionRequest.readPacket(packet);
 		
@@ -56,8 +57,8 @@ public class EncryptionHandler {
 		System.out.println("[Encryption]: Generating Keys...");
 		generateKeypair();
 		System.out.println("[Encryption]: Generated Keys");
-		generateSharedSecret();
 		loginMojang();
+		generateSharedSecret();
 		
 		System.out.println("[Encryption]: Sending Encryption response...");
 		L_EncryptionResponse_0x01_SB encryptionResponse = new L_EncryptionResponse_0x01_SB(sharedSecret, verifyToken);
@@ -95,9 +96,6 @@ public class EncryptionHandler {
 	
 	public void completeEncryption() {
 		System.out.println("[Encryption]: Sent Encryption Response");
-		if (secretKey != null) {
-			System.out.println("Failed to Authenticate");
-		}
 		if (!encrypting) {
 			setEncrypting(true);
 		}
@@ -107,12 +105,6 @@ public class EncryptionHandler {
 		if (!decrypting) {
 			setDecrypting(true);
 			manager.resumeReading();
-			try {
-				System.out.println("Decrypting Available: " + inputStream.available());
-				System.out.println("Original Available: " + connection.getInputStream().available());
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
 		}
 	}
 	
@@ -148,6 +140,10 @@ public class EncryptionHandler {
 	
 	public DataInputStream getInputStream() {
 		return inputStream;
+	}
+	
+	public DataInputStream getOriginalInputStream() {
+		return originalInputStream;
 	}
 	
 	public DataOutputStream getOutputStream() {

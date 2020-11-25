@@ -27,9 +27,11 @@ public class PacketReader implements Runnable {
 				synchronized (pauseReading) {
 					if (pauseReading.get()) {
 						pauseReading.wait(50);
+						System.out.println("Waiting");
+						continue;
 					}
 				}
-				if (handler.getInputStream().available() <= 0) {
+				if (handler.getOriginalInputStream().available() <= 0) {
 					Thread.sleep(50);
 					continue;
 				}
@@ -45,6 +47,7 @@ public class PacketReader implements Runnable {
 					|Data        |Byte Array   |Depends on the connection state and packet ID    |
 					|============================================================================|
 					 */
+					System.out.println(handler.getInputStream().available());
 					int length = Util.readVarInt(handler.getInputStream());
 					int packetID = Util.readVarInt(handler.getInputStream());
 					byte[] data = new byte[length - Util.varIntLength(packetID)];
@@ -108,6 +111,7 @@ public class PacketReader implements Runnable {
 	public void setPauseReading(boolean value) {
 		synchronized (pauseReading) {
 			pauseReading.set(value);
+			pauseReading.notify();
 		}
 	}
 	

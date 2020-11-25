@@ -4,6 +4,9 @@ import com.kmaf.ProxyClient.Auth.AuthenticationException;
 import com.kmaf.ProxyClient.Auth.Yggdrasil;
 import com.kmaf.ProxyClient.protocol.GameState;
 import com.kmaf.ProxyClient.protocol.GenericPacket;
+import com.kmaf.ProxyClient.protocol.ProtocolX47.Server.incomingPackets.L_LoginSuccess_0x02_PB;
+import com.kmaf.ProxyClient.protocol.ProtocolX47.Server.incomingPackets.L_SetCompression_0x03_PB;
+import com.kmaf.ProxyClient.protocol.ProtocolX47.Server.incomingPackets.P_SetCompression_0x46_PB;
 import com.kmaf.ProxyClient.protocol.ProtocolX47.Server.outgoingPackets.HS_Handshake_0x00_SB;
 import com.kmaf.ProxyClient.protocol.ProtocolX47.Server.outgoingPackets.L_LoginStart_0x00_SB;
 
@@ -78,8 +81,6 @@ public class ServerConnectionManager {
 	}
 	
 	public void readIncomingPacket() throws IOException, InterruptedException {
-		System.out.println("Decrypting Available: " + encryptionHandler.getInputStream().available());
-		System.out.println("Original Available: " + serverConnection.getInputStream().available());
 		GenericPacket packet;
 		synchronized (incomingPacketQueue) {
 			if (incomingPacketQueue.isEmpty()) {
@@ -89,6 +90,15 @@ public class ServerConnectionManager {
 			packet = incomingPacketQueue.poll();
 		}
 		switch (gameState) {
+			case PLAY: {
+				if (packet.getPacketID() == 0x46) {
+					P_SetCompression_0x46_PB compressionPacket = new P_SetCompression_0x46_PB();
+					compressionPacket.readPacket(packet);
+					setCompression(compressionPacket.getThreshold());
+					resumeReading();
+				}
+			}
+			return;
 			case HANDSHAKE: {
 				System.out.println("Received Packet while in Handshake state");
 			}
@@ -99,6 +109,19 @@ public class ServerConnectionManager {
 						encryptionHandler.handleEncryptionRequest(packet);
 					}
 					break;
+					case 0x02: {
+						L_LoginSuccess_0x02_PB loginSuccessPacket = new L_LoginSuccess_0x02_PB();
+						loginSuccessPacket.readPacket(packet);
+						this.gameState = GameState.PLAY;
+						resumeReading();
+					}
+					break;
+					case 0x03: {
+						L_SetCompression_0x03_PB compressionPacket = new L_SetCompression_0x03_PB();
+						compressionPacket.readPacket(packet);
+						setCompression(compressionPacket.getThreshold());
+						resumeReading();
+					}
 				}
 			}
 		}
@@ -127,7 +150,31 @@ public class ServerConnectionManager {
 		}
 	}
 	
+	public void setCompression(int threshold) {
+		packetReader.setCompressionThreshold(threshold);
+		packetWriter.setCompressionThreshold(threshold);
+	}
+	
 	public void addIncomingPacket(GenericPacket packet) {
+		switch (gameState) {
+			case PLAY: {
+				if (packet.getPacketID() == 0x46) {
+					pauseReading();
+				}
+			}
+			break;
+			case LOGIN: {
+				switch (packet.getPacketID()) {
+					case 0x01:
+					case 0x02:
+					case 0x03: {
+						pauseReading();
+					}
+					break;
+				}
+			}
+			break;
+		}
 		incomingPacketQueue.add(packet);
 	}
 }
